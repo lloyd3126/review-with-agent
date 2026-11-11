@@ -1,0 +1,17 @@
+{
+  "name": "lesson-review-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "package:student": "node ../.agents/skills/lesson-review-workspace/scripts/workbench.mjs package"
+  },
+  "engines": { "node": ">=20.9.0" },
+  "dependencies": {
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

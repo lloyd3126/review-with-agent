@@ -5,13 +5,13 @@ import useWorkspace from '../hooks/useWorkspace';
 import AnnotationsPane from './AnnotationsPane';
 import DocumentPreview from './DocumentPreview';
 import {DeleteDialog, OnboardingDialog, ReviewDialog, UploadDialog} from './LessonDialogs';
-import ReferenceDialog from './ReferenceDialog';
+import ReferenceList from './ReferenceList';
 import WorkbenchError from './WorkbenchError';
 
 export default function Workspace() {
   const workspace = useWorkspace();
   const [dialog, setDialog] = useState(null);
-  const [uploadedTitle, setUploadedTitle] = useState('');
+  const [uploadedLesson, setUploadedLesson] = useState(null);
   const [selection, setSelection] = useState(null);
   const [toast, setToast] = useState(false);
   const copyTimer = useRef(null);
@@ -31,7 +31,7 @@ export default function Workspace() {
 
   async function upload(file) {
     const imported = await workspace.importLesson(file);
-    setUploadedTitle(imported.title);
+    setUploadedLesson(imported);
     setDialog('onboarding');
   }
 
@@ -58,7 +58,6 @@ export default function Workspace() {
         {!!workspace.lessons.length && !workspace.selectedId && <option value="" disabled>選擇文件</option>}
         {workspace.lessons.map(lesson => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
       </select>
-      <button className="secondary" disabled={!workspace.lesson || workspace.busy} onClick={() => setDialog('references')}>參考文件</button>
       <button className="secondary" disabled={!workspace.lesson || workspace.busy} onClick={() => setDialog('replace')}>上傳新版</button>
       <button className="secondary" disabled={!workspace.lesson || workspace.busy} onClick={() => setDialog('delete')}>刪除文件</button>
     </header>
@@ -67,17 +66,18 @@ export default function Workspace() {
       <div className="workspace-columns">
         <DocumentPreview lesson={workspace.lesson} selection={currentSelection}
           onRefresh={workspace.refreshCurrent} onError={workspace.report} />
-        <AnnotationsPane key={`${workspace.selectedId}:${workspace.lesson?.documentToken}`} lesson={workspace.lesson} selection={currentSelection}
-          onLocate={locate} onCopied={copied} onNotice={workspace.setNotice} />
+        <div className="review-column">
+          <ReferenceList lesson={workspace.lesson} />
+          <AnnotationsPane key={`${workspace.selectedId}:${workspace.lesson?.documentToken}`} lesson={workspace.lesson} selection={currentSelection}
+            onLocate={locate} onCopied={copied} onNotice={workspace.setNotice} />
+        </div>
       </div>
     </main>
     {dialog === 'upload' && <UploadDialog busy={workspace.busy} onUpload={upload} onClose={() => setDialog(null)} />}
     {dialog === 'replace' && <UploadDialog replace busy={workspace.busy} onUpload={replaceDocument} onClose={() => setDialog(null)} />}
-    {dialog === 'onboarding' && <OnboardingDialog title={uploadedTitle} onClose={() => setDialog(null)} onCopied={copied} />}
-    {dialog === 'review' && workspace.lesson && <ReviewDialog title={workspace.lesson.title} onClose={() => setDialog(null)} onCopied={copied} />}
+    {dialog === 'onboarding' && uploadedLesson && <OnboardingDialog lesson={uploadedLesson} onClose={() => setDialog(null)} onCopied={copied} />}
+    {dialog === 'review' && workspace.lesson && <ReviewDialog lesson={workspace.lesson} onClose={() => setDialog(null)} onCopied={copied} />}
     {dialog === 'delete' && workspace.lesson && <DeleteDialog lesson={workspace.lesson} onClose={() => setDialog(null)} onCopied={copied} />}
-    {dialog === 'references' && workspace.lesson && <ReferenceDialog lesson={workspace.lesson} busy={workspace.busy}
-      onAdd={workspace.addReferences} onRemove={workspace.removeReference} onClose={() => setDialog(null)} />}
     {toast && <div className="toast" role="status">已複製，可以貼到 Agent 對話。</div>}
   </div>;
 }

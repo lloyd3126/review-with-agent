@@ -70,7 +70,7 @@ export async function importLesson(root, data, filename, title, python = 'python
   filename = safeName(filename);
   if (!filename.toLowerCase().endsWith('.pdf')) throw new Error('請上傳 .pdf 格式的文件');
   const parent = path.join(root, 'lessons');
-  const id = `${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${randomUUID().slice(0, 8)}`;
+  const id = randomUUID();
   const staging = path.join(parent, `.import-${randomUUID()}`);
   await fs.mkdir(staging, {recursive: true});
   try {
@@ -91,7 +91,6 @@ export async function importLesson(root, data, filename, title, python = 'python
       pageCount: inspected.pageCount,
       documentHash,
       documentToken: randomUUID(),
-      materials: [],
     };
     await fs.chmod(file, 0o444);
     await atomicJson(path.join(staging, 'lesson.json'), metadata);
@@ -217,12 +216,30 @@ export async function readCurrentDocument(root, id, expected = {}) {
   });
 }
 
+async function listMaterials(dir) {
+  const directory = await checkedFile(dir, 'materials');
+  const entries = await fs.readdir(directory, {withFileTypes: true});
+  const materials = await Promise.all(entries.filter(entry => entry.isFile() && !entry.name.startsWith('.')).map(async entry => {
+    try {
+      const file = path.join(directory, entry.name);
+      const stat = await fs.lstat(file);
+      if (!stat.isFile()) return null;
+      return {name: entry.name, size: stat.size, modifiedAt: stat.mtimeMs};
+    } catch (error) {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    }
+  }));
+  return materials.filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function getLesson(root, id) {
   return withLessonLock(root, id, async () => {
     const dir = lessonDir(root, id);
-    const [meta, comments] = await Promise.all([
+    const [meta, comments, materials] = await Promise.all([
       getMetadata(root, id),
       readJson(await checkedFile(dir, 'review/annotations.json')),
+      listMaterials(dir),
     ]);
     if (meta.format !== 'pdf') throw Object.assign(new Error('找不到這份 PDF 文件'), {status: 404});
     const documentHash = meta.documentHash;
@@ -231,7 +248,8 @@ export async function getLesson(root, id) {
       title: meta.title,
       format: 'pdf',
       originalName: meta.originalName,
-      materials: meta.materials || [],
+      materials,
+      materialHash: hash(JSON.stringify(materials)),
       annotations: comments.annotations || [],
       history: comments.history || [],
       pageCount: meta.pageCount,
@@ -308,50 +326,6 @@ export async function deleteLesson(root, id) {
   });
 }
 
-export async function addMaterial(root, id, data, filename, python = 'python3') {
-  const dir = lessonDir(root, id);
-  const metadataFile = await checkedFile(dir, 'lesson.json');
-  const meta = await readJson(metadataFile);
-  filename = safeName(filename);
-  const extension = path.extname(filename).toLowerCase();
-  if (extension !== '.pdf') throw new Error('參考資料僅支援 .pdf 格式');
-  const materialId = randomUUID().slice(0, 8);
-  const stored = `${materialId}-${filename}`;
-  const materialDirectory = await checkedFile(dir, 'materials');
-  const destination = path.join(materialDirectory, stored);
-  try {
-    const existing = await fs.lstat(destination);
-    if (existing.isSymbolicLink()) throw new Error('參考資料檔案位置無效');
-    throw new Error('參考資料檔案已存在');
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-  let created = false;
-  try {
-    await fs.writeFile(destination, data, {flag: 'wx'});
-    created = true;
-    await inspectPdf(destination, python);
-    const material = {id: materialId, file: stored, name: filename, type: extension.slice(1), size: data.length, createdAt: new Date().toISOString()};
-    meta.materials = [...(meta.materials || []), material];
-    meta.updatedAt = material.createdAt;
-    await fs.chmod(destination, 0o444);
-    await atomicJson(metadataFile, meta);
-    return material;
-  } catch (error) {
-    const rollbackErrors = [];
-    if (created) {
-      try { await fs.rm(destination, {force: true}); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
-    }
-    if (rollbackErrors.length) {
-      const message = rollbackErrors.map(rollbackError => rollbackError.message).join('。');
-      const rollbackFailure = new AggregateError([error, ...rollbackErrors], `參考資料新增失敗，復原不完整：${message}`);
-      rollbackFailure.status = 500;
-      throw rollbackFailure;
-    }
-    throw error;
-  }
-}
-
 async function lockOwner(lock) {
   try {
     const owner = await readJson(path.join(lock, 'owner.json'));
@@ -395,51 +369,6 @@ export async function withLessonLock(root, id, action) {
   }
   if (!acquired) throw new Error('這份文件正在保存，請稍後再試');
   try { return await action(); } finally { await fs.rm(lock, {recursive: true, force: true}); }
-}
-
-export async function removeMaterial(root, id, materialId) {
-  return withLessonLock(root, id, async () => {
-    const dir = lessonDir(root, id);
-    const metadataFile = await checkedFile(dir, 'lesson.json');
-    const meta = await readJson(metadataFile);
-    const material = (meta.materials || []).find(item => item.id === materialId);
-    if (!material) throw Object.assign(new Error('找不到參考資料'), {status: 404});
-    const materialDirectory = path.join(dir, 'materials');
-    const file = await checkedFile(materialDirectory, path.basename(material.file));
-    const temporary = path.join(materialDirectory, `.delete-${randomUUID()}`);
-    const previousMetadata = await fs.readFile(metadataFile);
-    let moved = false;
-    let temporaryExists = false;
-    try {
-      await fs.rename(file, temporary);
-      moved = true;
-      temporaryExists = true;
-      await atomicJson(metadataFile, {...meta, materials: meta.materials.filter(item => item.id !== materialId), updatedAt: new Date().toISOString()});
-      await fs.unlink(temporary);
-      temporaryExists = false;
-    } catch (error) {
-      const rollbackErrors = [];
-      try { await restoreFile(metadataFile, previousMetadata); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
-      if (moved) {
-        try {
-          await fs.rename(temporary, file);
-          temporaryExists = false;
-        } catch (rollbackError) {
-          rollbackErrors.push(rollbackError);
-        }
-      }
-      if (rollbackErrors.length) {
-        const message = rollbackErrors.map(rollbackError => rollbackError.message).join('。');
-        const rollbackFailure = new AggregateError([error, ...rollbackErrors], `參考資料刪除失敗，復原不完整：${message}`);
-        rollbackFailure.status = 500;
-        throw rollbackFailure;
-      }
-      throw error;
-    } finally {
-      if (!temporaryExists) await fs.rm(temporary, {force: true});
-    }
-    return {id: materialId};
-  });
 }
 
 function annotationGeometry(page, rects, pageCount) {

@@ -158,12 +158,13 @@ button.close { min-width: 32px; min-height: 32px; padding: 0; border: 0; backgro
 .dialog-content p.error { margin: 12px 0 0; color: var(--foreground); font-size: 13px; }
 .dialog-content p:empty { display: none; }
 .dialog-footer { justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--border); }
-.section-title { margin-bottom: 8px; font-size: 14px; font-weight: 600; }
-.material-list { list-style: none; margin-bottom: 16px; }
-.material-item { display: flex; align-items: center; gap: var(--gap); padding: 8px 0; border-bottom: 1px solid var(--border); }
-.material-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
-.material-item button { flex-shrink: 0; min-height: 32px; padding: 0 12px; font-size: 12px; }
-#materials-form button { margin-top: 8px; }
+.review-column { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
+.review-column > #annotation-pane { flex: 1; }
+.references-pane { flex-shrink: 0; max-height: 30%; overflow: auto; padding: 16px; }
+.references-pane h2 { margin-bottom: 8px; }
+.references-pane .help { color: var(--text-secondary); font-size: 14px; line-height: 1.8; }
+.material-list { list-style: none; }
+.material-name { padding: 4px 0; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
 .notice { padding: 16px; border: 1px solid var(--foreground); border-radius: 8px; font-size: 14px; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 10; max-width: calc(100vw - 48px); padding: 16px 20px; border-radius: 10px; background: var(--foreground); color: var(--background); font-size: 14px; }
 
@@ -188,7 +189,8 @@ button.close { min-width: 32px; min-height: 32px; padding: 0; border: 0; backgro
   .workspace-page { height: auto; min-height: 100dvh; }
   .workspace-columns { grid-template-columns: 1fr; }
   .document-pane { height: 70dvh; min-height: 400px; }
-  #annotation-pane { height: 50dvh; min-height: 280px; }
+  .references-pane { max-height: 25dvh; }
+  .review-column > #annotation-pane { flex: auto; height: 50dvh; min-height: 280px; }
 }
 @media (max-width: 600px) {
   .app-header { flex-wrap: wrap; }

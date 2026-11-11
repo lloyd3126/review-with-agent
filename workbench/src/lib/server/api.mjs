@@ -1,13 +1,10 @@
 import path from 'node:path';
 import {
-  addMaterial,
   getLesson,
   importLesson,
   listLessons,
   readCurrentDocument,
-  removeMaterial,
   replaceDocument,
-  withLessonLock,
 } from './store.mjs';
 
 const response = (data, status = 200) => Response.json(data, {
@@ -51,7 +48,8 @@ function lessonView(lesson) {
     title: lesson.title,
     format: lesson.format,
     originalName: lesson.originalName,
-    materials: lesson.materials || [],
+    materials: lesson.materials,
+    materialHash: lesson.materialHash,
     annotations: lesson.annotations || [],
     history: lesson.history || [],
     pageCount: lesson.pageCount,
@@ -127,20 +125,7 @@ export async function handleRequest(request) {
         if (!data.length) return response({error: '檔案內容為空'}, 400);
         return response(await replaceDocument(root, id, data, decodeURIComponent(request.headers.get('x-filename') || ''), python), 200);
       }
-      if (request.method === 'POST' && resource === 'materials') {
-        const data = await readBody(request);
-        if (!data.length) return response({error: '檔案內容為空'}, 400);
-        return response(await withLessonLock(root, id, () => addMaterial(
-          root,
-          id,
-          data,
-          decodeURIComponent(request.headers.get('x-filename') || ''),
-          python,
-        )), 201);
-      }
-      if (request.method === 'DELETE' && /^materials\/[a-f0-9]{8}$/.test(resource || '')) {
-        return response(await removeMaterial(root, id, resource.slice('materials/'.length)));
-      }
+
     }
     return response({error: '找不到這份資料'}, 404);
   } catch (error) {

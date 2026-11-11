@@ -65,10 +65,3 @@ export async function uploadFile(url, file, token) {
     body: file,
   });
 }
-
-export function deleteReference(lessonId, materialId, token) {
-  return readJSON(`/api/lessons/${lessonId}/materials/${materialId}`, {
-    method: 'DELETE',
-    headers: {'X-Workbench-Token': token},
-  });
-}

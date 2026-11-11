@@ -19,7 +19,7 @@ test('PDF 教案替換、註解重置、參考資料保留與檔案邊界', asyn
   process.env.LESSON_PYTHON = python;
   process.env.LESSON_TOKEN = 'test-token';
   const {handleRequest} = await import('../src/lib/server/api.mjs');
-  const {addMaterial, getLesson, hash, removeMaterial, replaceDocument} = await import('../src/lib/server/store.mjs');
+  const {getLesson, hash, replaceDocument} = await import('../src/lib/server/store.mjs');
   async function api(route, options = {}) {
     return handleRequest(new Request(`http://127.0.0.1:9999${route}`, {
       ...options,
@@ -44,6 +44,7 @@ test('PDF 教案替換、註解重置、參考資料保留與檔案邊界', asyn
     const metadata = await imported.json();
     const lessonId = metadata.id;
     assert.equal(metadata.format, 'pdf');
+    assert.match(metadata.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.equal(metadata.pageCount, 1);
     assert.match(metadata.documentToken, /^[0-9a-f-]{36}$/);
     assert.equal(metadata.documentHash, hash(pdfBytes));
@@ -96,83 +97,32 @@ test('PDF 教案替換、註解重置、參考資料保留與檔案邊界', asyn
     assert.equal(updated.annotations.length, 1);
     assert.equal(updated.annotations[0].id, '#001');
     assert.equal(updated.annotations[0].anchorText, '新的位置');
-    const materialsUrl = `/api/lessons/${lessonId}/materials`;
-    const metadataBeforeRejection = await fs.readFile(path.join(dir, 'lesson.json'));
-    const filesBeforeRejection = await fs.readdir(path.join(dir, 'materials'));
-    for (const extension of ['docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'md']) {
-      const rejected = await api(materialsUrl, {method: 'POST', headers: {'x-filename': `reference.${extension}`}, body: pdfBytes});
-      assert.equal(rejected.status, 400);
-      assert.match((await rejected.json()).error, /僅支援 .pdf/);
-    }
-    for (const bytes of [Buffer.from('not a PDF'), ...JSON.parse(rejectedPdfs).map(encoded => Buffer.from(encoded, 'base64'))]) {
-      const rejected = await api(materialsUrl, {method: 'POST', headers: {'x-filename': 'reference.pdf'}, body: bytes});
-      assert.equal(rejected.status, 400);
-    }
-    assert.deepEqual(await fs.readFile(path.join(dir, 'lesson.json')), metadataBeforeRejection);
-    assert.deepEqual(await fs.readdir(path.join(dir, 'materials')), filesBeforeRejection);
-    const material = await api(`/api/lessons/${lessonId}/materials`, {method: 'POST', headers: {'x-filename': encodeURIComponent('課本.pdf')}, body: pdfBytes});
-    assert.equal(material.status, 201);
-    const materialData = await material.json();
-    const materialRoute = `/api/lessons/${lessonId}/materials/${materialData.id}`;
-    assert.equal((await api(materialRoute)).status, 404);
-    assert.deepEqual(await fs.readFile(path.join(dir, 'materials', materialData.file)), pdfBytes);
-    const materialDirectory = await fs.realpath(path.join(dir, 'materials'));
+    const materialDirectory = path.join(dir, 'materials');
+    const materialData = {file: '課本.pdf'};
+    const metadataBeforeMaterials = await fs.readFile(path.join(dir, 'lesson.json'));
+    const beforeMaterials = await getLesson(root, lessonId);
+    await fs.writeFile(path.join(materialDirectory, materialData.file), pdfBytes);
+    await fs.writeFile(path.join(materialDirectory, '要求.md'), '# 文件要求');
+    await fs.writeFile(path.join(materialDirectory, '補充.custom'), 'Any format');
+    await fs.writeFile(path.join(materialDirectory, '.draft'), 'Hidden work in progress');
+    await fs.mkdir(path.join(materialDirectory, 'folder'));
     const outsideMaterial = path.join(root, 'outside-material.txt');
     await fs.writeFile(outsideMaterial, 'outside');
-    const originalLstat = fs.lstat;
-    let injectedMaterialPath = '';
-    fs.lstat = async file => {
-      if (!injectedMaterialPath && file.startsWith(`${materialDirectory}${path.sep}`)) {
-        injectedMaterialPath = file;
-        return {isSymbolicLink: () => true};
-      }
-      return originalLstat(file);
-    };
-    try {
-      await assert.rejects(addMaterial(root, lessonId, pdfBytes, '外部.pdf', python), /位置無效/);
-    } finally {
-      fs.lstat = originalLstat;
-    }
-    assert.equal(await fs.readFile(outsideMaterial, 'utf8'), 'outside');
-    assert.match(injectedMaterialPath, /\.pdf$/);
-    const chmodFailureMetadata = await fs.readFile(path.join(dir, 'lesson.json'));
-    const originalChmod = fs.chmod;
-    let failMaterialChmod = true;
-    fs.chmod = async (file, mode) => {
-      if (failMaterialChmod && file.startsWith(`${materialDirectory}${path.sep}`)) {
-        failMaterialChmod = false;
-        throw new Error('注入參考資料 chmod 失敗');
-      }
-      return originalChmod(file, mode);
-    };
-    try {
-      await assert.rejects(addMaterial(root, lessonId, pdfBytes, 'chmod.pdf', python), /注入參考資料 chmod 失敗/);
-    } finally {
-      fs.chmod = originalChmod;
-    }
-    assert.deepEqual(await fs.readFile(path.join(dir, 'lesson.json')), chmodFailureMetadata);
-    const rollbackMaterial = await addMaterial(root, lessonId, pdfBytes, 'notes.pdf', python);
-    const rollbackMaterialFile = path.join(materialDirectory, rollbackMaterial.file);
-    const beforeMaterialDelete = {
-      metadata: await fs.readFile(path.join(dir, 'lesson.json')),
-      file: await fs.readFile(rollbackMaterialFile),
-    };
-    const originalUnlink = fs.unlink;
-    let failMaterialUnlink = true;
-    fs.unlink = async file => {
-      if (failMaterialUnlink && file.includes(`${path.sep}materials${path.sep}.delete-`)) {
-        failMaterialUnlink = false;
-        throw new Error('注入參考資料 unlink 失敗');
-      }
-      return originalUnlink(file);
-    };
-    try {
-      await assert.rejects(removeMaterial(root, lessonId, rollbackMaterial.id), /注入參考資料 unlink 失敗/);
-    } finally {
-      fs.unlink = originalUnlink;
-    }
-    assert.deepEqual(await fs.readFile(path.join(dir, 'lesson.json')), beforeMaterialDelete.metadata);
-    assert.deepEqual(await fs.readFile(rollbackMaterialFile), beforeMaterialDelete.file);
+    await fs.symlink(outsideMaterial, path.join(materialDirectory, 'link.txt'));
+    const withMaterials = await (await api(`/api/lessons/${lessonId}`)).json();
+    assert.deepEqual(new Set(withMaterials.materials.map(item => item.name)), new Set(['課本.pdf', '要求.md', '補充.custom']));
+    assert.notEqual(withMaterials.materialHash, beforeMaterials.materialHash);
+    assert.deepEqual(await fs.readFile(path.join(dir, 'lesson.json')), metadataBeforeMaterials);
+    await fs.writeFile(path.join(materialDirectory, '要求.md'), '# Agent 更新的文件要求');
+    const editedMaterials = await getLesson(root, lessonId);
+    assert.notEqual(editedMaterials.materialHash, withMaterials.materialHash);
+    await fs.unlink(path.join(materialDirectory, '補充.custom'));
+    const removedMaterials = await getLesson(root, lessonId);
+    assert.equal(removedMaterials.materials.some(item => item.name === '補充.custom'), false);
+    assert.notEqual(removedMaterials.materialHash, editedMaterials.materialHash);
+    assert.equal((await api(`/api/lessons/${lessonId}/materials`, {method: 'POST', headers: {'x-filename': 'extra.pdf'}, body: pdfBytes})).status, 404);
+    assert.equal((await api(`/api/lessons/${lessonId}/materials/12345678`, {method: 'DELETE'})).status, 404);
+    assert.equal((await api(`/api/lessons/${lessonId}/materials/12345678`)).status, 404);
     const previousToken = lesson.documentToken;
     const replaced = await api(`/api/lessons/${lessonId}/document`, {method: 'POST', headers: {'x-filename': encodeURIComponent('新版.pdf')}, body: secondData});
     assert.equal(replaced.status, 200);
@@ -188,6 +138,7 @@ test('PDF 教案替換、註解重置、參考資料保留與檔案邊界', asyn
     assert.equal(lesson.documentHash, hash(secondData));
     assert.equal(lesson.originalName, '新版.pdf');
     assert.deepEqual(await fs.readFile(path.join(dir, 'materials', materialData.file)), pdfBytes);
+    assert.deepEqual(lesson.materials, removedMaterials.materials);
     const replacedDocument = await api(`/api/lessons/${lessonId}/document?hash=${lesson.documentHash}&token=${lesson.documentToken}`);
     assert.deepEqual(Buffer.from(await replacedDocument.arrayBuffer()), secondData);
     assert.equal((await api(`/api/lessons/${lessonId}/document?hash=${hash(pdfBytes)}`)).status, 409);

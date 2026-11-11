@@ -2,21 +2,22 @@
 
 以下指令由 Agent 執行，使用者只透過對話和工作台操作。程式入口路徑以專案根目錄為基準。請用實際可用的 Node.js 與 Python 執行檔替換範例的 `node`、`python3`。
 
-工作台上方按鈕依序為「上傳文件」、文件下拉選單、「參考文件」、「上傳新版」與「刪除文件」。
+工作台上方按鈕依序為「上傳文件」、文件下拉選單、「上傳新版」與「刪除文件」。
 
 ## 檔案位置
 
 每份文件位於 `lessons/<id>/`。從「上傳文件」建立另一份文件時會產生新的識別碼，不會覆寫其他文件。從既有文件使用「上傳新版」時，會替換該文件的目前文件，不保存被替換的舊 PDF。
 
 1. `document.pdf`：目前文件的 PDF。
-2. `materials/`：使用者上傳的 PDF 參考資料。文件與參考資料皆只接受 PDF，並在保存前檢查有效性。顯示名稱及實際檔名記錄在 `lesson.json`。
+2. `materials/`：Agent 依使用者需求複製或新增的參考資料，不限格式。網站直接讀取此資料夾中的非隱藏一般檔案，不列出目錄或符號連結，不需登錄清單。
 3. `review/annotations.json`：`annotations` 為目前 PDF 的待討論項目，`history` 為目前 PDF 的處理記錄，`nextNumber` 保存下一個可用編號。
-4. `lesson.json`：保存文件識別碼、標題、`format`、`originalName`、`pageCount`、`documentHash`、更新時間與參考資料清單。
+4. `lesson.json`：保存文件識別碼、標題、`format`、`originalName`、`pageCount`、`documentHash`與更新時間。
 
 `workbench/src/` 是預先完成的網站程式，分為 `app`、`components`、`hooks`、`lib/client` 和 `lib/server`。`.runtime/` 放啟動資訊與暫存資料。不要將使用者的文件或執行產物放進 skill。
 
-使用者在上方的「參考文件」中查看清單、新增或逐筆刪除目前文件的資料。刪除會一併移除檔案與清單紀錄，不影響其他文件。Agent 開始檢視前直接重新讀取清單，避免引用已刪除的資料，不要求使用者複製檔案路徑或清單。
+網站在註解區上方顯示唯讀參考資料清單，每 5 秒同步。沒有管理按鈕、上傳、編輯、刪除或開啟操作。Agent 核對複製提示中的文件識別碼後，將使用者提供的檔案複製至 `lessons/<id>/materials/`，或在此新增使用者要求的筆記與補充文件。保留有意義的檔名，不覆寫同名檔案。Agent 新增的內容須標明來源與用途，不當成使用者提供的標準。
 
+清單以檔案系統為準，新增檔案不需修改 `lesson.json`。Agent 檢視前重新讀取該份文件的清單，避免引用其他文件的資料。複製提示均帶有文件識別碼，標題只供輔助辨識。
 ## 啟動與查找
 
 ```sh
@@ -61,13 +62,13 @@ python3 .agents/skills/lesson-review-workspace/scripts/pdf_tools.py inspect less
 node .agents/skills/lesson-review-workspace/scripts/workbench.mjs replace-document --lesson LESSON_ID --file /absolute/new-document.pdf
 ```
 
-PDF 檢查輸出包含頁數、頁面尺寸、旋轉角度、文字摘要與文件雜湊。文件與參考資料都須渲染頁面並以視覺方式閱讀後再提出問題，文字摘要只輔助搜尋與定位。使用者應在原本的編輯工具修改原稿，再匯出 PDF。Agent 不直接修改 Word 或 PDF，也不把 PDF 轉換回可編輯文件。
+PDF 檢查輸出包含頁數、頁面尺寸、旋轉角度、文字摘要與文件雜湊。目前文件與 PDF 參考資料採視覺閱讀，文字摘要只輔助搜尋與定位。圖片直接查看，文字直接閱讀，其他格式使用相應工具，無法閱讀時明確說明。使用者應在原本的編輯工具修改原稿，再匯出 PDF。Agent 不直接修改 Word 或 PDF，也不把 PDF 轉換回可編輯文件。
 
 更換指令先驗證輸入檔案。驗證成功後才將輸入檔案寫入 `document.pdf`，更新 `lesson.json` 的 `format`、`originalName`、`pageCount` 與 `documentHash`，保留文件識別碼、標題和 `materials/`。同時清空 `review/annotations.json` 的 `annotations`、`history`、框選資料，將 `nextNumber` 重設為 1。即使輸入檔案與目前文件相同，也執行相同清空。驗證失敗時保留原本文件、註解、討論記錄與參考資料。
 
 更換完成後，工作台開啟「重新檢視文件」視窗，提供可複製的重新檢視提示，不會自動呼叫 Agent：
 
-> 請先以視覺方式閱讀目前文件與參考資料的 PDF 頁面，再重新檢視文件。文件用途與背景可以沿用，但不要預設先前的建議仍然成立。每個問題都須重新核對，只提出目前文件仍支持的問題，避免為了延續先前討論而重複舊建議。先指出問題與依據，再透過提問引導我討論，不直接提供解法。
+> 請先以視覺方式閱讀目前 PDF，並依格式閱讀這份文件的參考資料，再重新檢視文件。文件用途與背景可以沿用，但不要預設先前的建議仍然成立。每個問題都須重新核對，只提出目前文件仍支持的問題，避免為了延續先前討論而重複舊建議。先指出問題與依據，再透過提問引導我討論，不直接提供解法。
 
 ## 註解與重新檢視
 

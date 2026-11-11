@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {deleteReference, isFatal, readJSON, RequestError, uploadFile} from '../lib/client/api';
+import {isFatal, readJSON, RequestError, uploadFile} from '../lib/client/api';
 
 export default function useWorkspace() {
   const [lessons, setLessons] = useState([]);
@@ -70,6 +70,7 @@ export default function useWorkspace() {
       setLesson(previous => previous?.id === next.id
         && previous.documentHash === next.documentHash
         && previous.annotationHash === next.annotationHash
+        && previous.materialHash === next.materialHash
         && previous.documentToken === next.documentToken
         && previous.updatedAt === next.updatedAt ? previous : next);
     }
@@ -160,22 +161,6 @@ export default function useWorkspace() {
     return imported;
   }), [mutate, selectLesson]);
 
-  const addReferences = useCallback((files, progress) => mutate(async token => {
-    const id = selection.current;
-    try {
-      for (let index = 0; index < files.length; index++) {
-        progress(`正在保存 ${index + 1} / ${files.length}：${files[index].name}`);
-        await uploadFile(`/api/lessons/${id}/materials`, files[index], token);
-      }
-    } finally { await refreshLesson(id); }
-  }), [mutate, refreshLesson]);
-
-  const removeReference = useCallback(material => mutate(async token => {
-    const id = selection.current;
-    await deleteReference(id, material.id, token);
-    await refreshLesson(id);
-  }), [mutate, refreshLesson]);
-
   const replaceDocument = useCallback(file => mutate(async token => {
     const id = selection.current;
     generation.current++;
@@ -190,5 +175,5 @@ export default function useWorkspace() {
   }, [refreshLesson, report]);
 
   return {lessons, selectedId, lesson, loading, busy, notice, failure,
-    selectLesson, importLesson, replaceDocument, refreshCurrent, addReferences, removeReference, setNotice, report};
+    selectLesson, importLesson, replaceDocument, refreshCurrent, setNotice, report};
 }

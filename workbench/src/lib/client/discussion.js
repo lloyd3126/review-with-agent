@@ -14,6 +14,12 @@ export function reviewPrompt(lesson) {
   return `我已更換文件「${lesson.title}」（識別碼：${lesson.id}）的 PDF。\n\n${reviewInstructions}`;
 }
 
+export function moreSuggestionsPrompt(lesson) {
+  return `請繼續檢視文件「${lesson.title}」（識別碼：${lesson.id}）。先以視覺方式閱讀目前 PDF，並依格式閱讀這份文件的參考資料、核對既有註解，找出其他有依據、值得討論的問題，避免重複。
+
+保留既有註解與討論紀錄，延續編號。以自然段落說明問題、依據及引導提問，不使用固定標籤，不直接提供解法。若沒有其他值得提出的問題，直接說明，不必湊數。`;
+}
+
 export function deletionPrompt(lesson) {
   return `請刪除本專案工作台中的文件「${lesson.title}」（識別碼：${lesson.id}）。
 

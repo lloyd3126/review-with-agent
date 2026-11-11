@@ -2,7 +2,7 @@
 
 import {useRef, useState} from 'react';
 import {copyText} from '../lib/client/clipboard';
-import {discussionPrompt} from '../lib/client/discussion';
+import {discussionPrompt, moreSuggestionsPrompt} from '../lib/client/discussion';
 
 const statuses = {resolved: '已釐清', dismissed: '保留原設計', obsolete: '已不適用'};
 const guidance = 'Agent 會在這裡提出值得討論的問題';
@@ -24,15 +24,10 @@ export default function AnnotationsPane({lesson, selection, onLocate, onCopied, 
         {annotations.map(comment => {
           const stale = comment.documentSha256 !== lesson.documentHash;
           return <article className={`annotation-card${selection?.id === comment.id ? ' selected' : ''}`} key={comment.id}>
-            <div className="annotation-head">
-              <span className="annotation-id">{comment.id}</span>
-              <button type="button" className="secondary copy-id" aria-label={`複製 ${comment.id}`} onClick={() => copy(comment.id, comment.id)}>複製編號</button>
-            </div>
-            <button type="button" className="annotation-anchor" aria-label={`查看 ${comment.id} 對應位置`}
+            <span className="annotation-id">{comment.id}</span>
+            <button type="button" className="annotation-locate" aria-label={`查看 ${comment.id} 對應位置`}
               aria-pressed={selection?.id === comment.id} disabled={stale} onClick={() => onLocate(comment)}>
-              <span className="annotation-page">第 {comment.page} 頁</span>
-              {comment.anchorText}
-              <span className="annotation-text">{comment.text}</span>
+              {comment.text}
             </button>
             {stale && <p className="stale-note">這則問題與目前文件不符，請 Agent 重新檢視。</p>}
             <button type="button" className="secondary discuss" aria-label={`討論 ${comment.id} 這個問題`}
@@ -51,5 +46,9 @@ export default function AnnotationsPane({lesson, selection, onLocate, onCopied, 
         </div>)}
       </details>}
     </div>}
+    <div className="annotations-footer">
+      <button type="button" className="secondary" disabled={empty}
+        onClick={() => copy(moreSuggestionsPrompt(lesson), '更多建議')}>更多建議</button>
+    </div>
   </aside>;
 }

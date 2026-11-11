@@ -11,7 +11,7 @@
 1. `document.pdf`：目前文件的 PDF。
 2. `materials/`：Agent 依使用者需求複製或新增的參考資料，不限格式。網站直接讀取此資料夾中的非隱藏一般檔案，不列出目錄或符號連結，不需登錄清單。
 3. `review/annotations.json`：`annotations` 為目前 PDF 的待討論項目，`history` 為目前 PDF 的處理記錄，`nextNumber` 保存下一個可用編號。
-4. `lesson.json`：保存文件識別碼、標題、`format`、`originalName`、`pageCount`、`documentHash`與更新時間。
+4. `lesson.json`：保存文件識別碼、標題、`format`、`originalName`、`pageCount`、`documentHash` 與更新時間。
 
 `workbench/src/` 是預先完成的網站程式，分為 `app`、`components`、`hooks`、`lib/client` 和 `lib/server`。`.runtime/` 放啟動資訊與暫存資料。不要將使用者的文件或執行產物放進 skill。
 
@@ -80,10 +80,12 @@ node .agents/skills/lesson-review-workspace/scripts/workbench.mjs resolve-commen
 
 `--data` 接收包含 `anchorText`、`text`、`page` 和 `rects` 的 JSON 檔，適合多行或含引號的問題。`rects` 使用指定 PDF 頁面左上角起算的 0 至 1 相對座標。註解新增自動避開目前已用編號。更新目前註解時使用 `--id`，固定編號在目前 PDF 內不變。結案狀態可為 `resolved`、`dismissed` 或 `obsolete`。目前文件更換成功後，註解與處理記錄都會清空，下一個編號從 `#001` 開始。
 
+`text` 使用自然段落，將問題、支持判斷的依據及引導討論的提問連起來，不使用固定標籤或制式三段清單。可以用空行分段。有參考資料時，在敘述中指出可核對的來源與相關內容，說明它如何支持這項觀察。沒有參考資料時，根據文件本身、前後一致性與使用者提供的背景說明判斷，不補造引用或正式標準。推論須表明不確定性，文件未寫明的細節先詢問確認。以下示範沒有參考資料時的寫法：
+
 ```json
 {
   "anchorText": "這份報告的主要結論",
-  "text": "問題：目前結論段落中，尚未看到支持這項判斷的依據。\n理由與依據：結論與文件中提供的證據需要能核對的對應。\n開放問題：你原本希望用哪些資料支持這項結論？",
+  "text": "這段結論將結果推及所有使用者，但前文只描述新進同事的訪談，尚未說明推廣到其他對象的依據。這可能是文件省略了研究背景。\n\n你原本希望這項結論涵蓋哪些使用者？",
   "page": 1,
   "rects": [{"x": 0.12, "y": 0.25, "width": 0.65, "height": 0.04}]
 }
